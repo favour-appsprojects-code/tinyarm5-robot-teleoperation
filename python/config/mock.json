@@ -1,0 +1,13 @@
+{
+  "kind":"mock", "host":"127.0.0.1", "port":15005,
+  "verified":true,
+  "verification_reference":"SYNTHETIC loopback fixture only; IDs and calibration are NOT hardware settings",
+  "arm":[
+    {"joint":"j0","motor_id":1,"sign":1,"offset_rad":0,"limits_rad":[-2,2]},
+    {"joint":"j1","motor_id":2,"sign":1,"offset_rad":0,"limits_rad":[-2,2]},
+    {"joint":"j2","motor_id":3,"sign":1,"offset_rad":0,"limits_rad":[-2,2]},
+    {"joint":"j3","motor_id":4,"sign":1,"offset_rad":0,"limits_rad":[-2,2]},
+    {"joint":"j4","motor_id":5,"sign":1,"offset_rad":0,"limits_rad":[-2,2]}
+  ],
+  "gripper":{"verified":true,"motor_id":8,"limits_raw":[2500,3000],"open_raw":3000,"closed_raw":2500}
+}

@@ -1,4 +1,4 @@
-"""Simulation-only model and bounded, position-only damped least-squares IK."""
+"""Simulation-only model, bounded position IK, and secondary orientation IK."""
 from pathlib import Path
 import mujoco
 import numpy as np
@@ -18,6 +18,15 @@ def load_robot():
             forcelimited=1, forcerange=[-0.52, 0.52])
         actuator.set_to_position(kp=20, kv=0.5)
     spec.body('rotor_4').add_site(name='tip', pos=[0, -0.01, 0.09], size=[0.004])
+    for name, axis, color in [('x', [1, 0, 0], [1, 0, 0, 1]),
+                              ('y', [0, 1, 0], [0, 1, 0, 1]),
+                              ('z', [0, 0, 1], [0, 0.4, 1, 1])]:
+        origin = np.array([0, -0.01, 0.09])
+        spec.body('rotor_4').add_geom(name=f'tip_axis_{name}',
+            type=mujoco.mjtGeom.mjGEOM_CAPSULE,
+            fromto=[*origin, *(origin + 0.045 * np.array(axis))],
+            size=[0.0015, 0, 0], rgba=color, group=1,
+            contype=0, conaffinity=0, mass=0)
     model = spec.compile()
     return model
 
@@ -28,6 +37,85 @@ class IK:
         self.data = mujoco.MjData(model)
         self.tip = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, 'tip')
         self.jac = np.zeros((3, model.nv))
+        self.jacr = np.zeros((3, model.nv))
+
+    def orientation(self, q):
+        """Tip rotation in robot world coordinates, quaternion [w,x,y,z]."""
+        self.position(q)
+        quat = np.empty(4)
+        mujoco.mju_mat2Quat(quat, self.data.site_xmat[self.tip])
+        return quat
+
+    def rotation_error(self, desired, q):
+        """Shortest world-frame rotation vector; stable also near 180 degrees."""
+        self.position(q)
+        desired_matrix = np.empty(9)
+        mujoco.mju_quat2Mat(desired_matrix, desired)
+        difference = desired_matrix.reshape(3, 3) @ self.data.site_xmat[self.tip].reshape(3, 3).T
+        quat = np.empty(4)
+        mujoco.mju_mat2Quat(quat, difference.ravel())
+        if quat[0] < 0:
+            quat *= -1
+        error = np.empty(3)
+        mujoco.mju_quat2Vel(error, quat, 1)
+        return error
+
+    def solve_pose(self, target, seed, orientation=None, tolerance=0.0015):
+        """Position is mandatory; orientation is best effort within that bound.
+
+        Retain the position solution if orientation cannot improve. The exact
+        position-Jacobian null space gives orientation only spare joint motion.
+        Nonlinear candidates are position-corrected and checked before acceptance.
+        """
+        desired = None
+        if orientation is not None:
+            desired = np.asarray(orientation, dtype=float)
+            if desired.shape != (4,) or not np.all(np.isfinite(desired)):
+                raise ValueError('Orientation must be a finite wxyz quaternion')
+            norm = np.linalg.norm(desired)
+            if norm < 1e-8:
+                raise ValueError('Zero quaternion')
+            desired = desired / norm
+        q, position_error, reachable = self.solve(target, seed, tolerance)
+        if desired is None:
+            return q, position_error, reachable, None
+        angle = float(np.linalg.norm(self.rotation_error(desired, q)))
+        if not reachable:
+            return q, position_error, False, angle
+        for _ in range(24):
+            error = self.rotation_error(desired, q)
+            if np.linalg.norm(error) < np.deg2rad(1):
+                break
+            mujoco.mj_jacSite(self.model, self.data, self.jac, self.jacr, self.tip)
+            # Recompute the null space with outward-moving, saturated joints
+            # locked. Clipping an unconstrained step afterwards destroys its
+            # position cancellation and can stall the secondary objective.
+            free = np.ones(self.model.nv)
+            for _ in range(self.model.nv + 1):
+                position_jac = self.jac * free
+                null = np.diag(free) - np.linalg.pinv(position_jac, rcond=1e-5) @ position_jac
+                secondary = self.jacr @ null
+                dq = null @ secondary.T @ np.linalg.solve(
+                    secondary @ secondary.T + 0.02**2 * np.eye(3), error)
+                blocked = ((q >= self.model.jnt_range[:, 1]-1e-5) & (dq > 0)) | (
+                    (q <= self.model.jnt_range[:, 0]+1e-5) & (dq < 0))
+                blocked &= free > 0
+                if not np.any(blocked):
+                    break
+                free[blocked] = 0
+            dq *= min(1, 0.08 / max(np.max(np.abs(dq)), 1e-12))
+            for scale in (1, 0.5, 0.25):
+                candidate = np.clip(q + scale*dq, *self.model.jnt_range.T)
+                # Use the existing position budget instead of overconstraining
+                # correction to 0.5 mm and undoing feasible rotation motion.
+                candidate, distance, ok = self._solve_local(target, candidate, tolerance * 0.8)
+                candidate_angle = float(np.linalg.norm(self.rotation_error(desired, candidate)))
+                if distance <= tolerance and candidate_angle < angle - 1e-6:
+                    q, position_error, angle = candidate, distance, candidate_angle
+                    break
+            else:
+                break
+        return q, position_error, True, angle
 
     def position(self, q):
         self.data.qpos[:] = q

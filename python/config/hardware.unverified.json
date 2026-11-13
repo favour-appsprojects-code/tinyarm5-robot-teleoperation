@@ -1,0 +1,15 @@
+{
+  "kind": "physical",
+  "host": "192.168.1.244",
+  "port": 5005,
+  "verified": false,
+  "verification_reference": null,
+  "arm": [
+    {"joint":"j0", "motor_id":null, "sign":null, "offset_rad":null, "limits_rad":null},
+    {"joint":"j1", "motor_id":null, "sign":null, "offset_rad":null, "limits_rad":null},
+    {"joint":"j2", "motor_id":null, "sign":null, "offset_rad":null, "limits_rad":null},
+    {"joint":"j3", "motor_id":null, "sign":null, "offset_rad":null, "limits_rad":null},
+    {"joint":"j4", "motor_id":null, "sign":null, "offset_rad":null, "limits_rad":null}
+  ],
+  "gripper": null
+}
