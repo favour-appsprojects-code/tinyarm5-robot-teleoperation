@@ -160,3 +160,61 @@ Before requesting physical authorization, obtain:
    supervised low-speed procedure for validating one joint at a time.
 
 Do not substitute example IDs or simulation coordinates for those answers.
+
+## 2026-11-18 update: calibration requirements and what is still locked
+
+Searched the repository on 2026-11-18: there is **no receiver source code,
+motor-ID list, zero-offset table, gripper calibration or receiver motion/stop
+documentation**. Only `send_joint_angles.py` (format and example values) exists.
+The physical lock therefore stays in place: `RobotSender.set_enabled(True)`
+rejects every `kind: physical` profile, and the server's `physical_enabled`
+is a constant `False`.
+
+What changed around it: confirmation and recording now work in pure simulation
+(no profile needed), every approval is fsynced to
+`logs/robot_commands/*.jsonl` before any transmission, and the receiver laptop's
+reachability is monitored without ever sending to UDP 5005 (see
+[recording.md](recording.md)).
+
+### Calibration sheet to complete with the TA (one row per packet slot)
+
+| Packet slot | Model joint | Motor ID | Sign | Zero offset (rad) | Safe min / max (rad, receiver frame) | Verified how |
+|---|---|---|---|---|---|---|
+| 0 | j0 (base yaw) | ? | ? | ? | ? / ? | |
+| 1 | j1 | ? | ? | ? | ? / ? | |
+| 2 | j2 | ? | ? | ? | ? / ? | |
+| 3 | j3 | ? | ? | ? | ? / ? | |
+| 4 | j4 (wrist) | ? | ? | ? | ? / ? | |
+| 5 | gripper raw | ? (example 8) | n/a | open ? / closed ? | raw range ? | |
+
+Also required before enabling motion:
+
+1. Receiver script and the exact `--ids` order it was started with; whether it
+   accepts 20-byte packets when a gripper ID is configured.
+2. Receiver behaviour per packet: jump vs interpolate, velocity/acceleration
+   limits, watchdog/hold on silence, clamping, what happens on malformed input.
+3. Stop procedure: who holds the power/torque-disable, and how torque is disabled
+   in software (`DISABLE OUTPUT` here only stops *this* sender).
+4. Physical home pose with measured joint angles, used as the known start state
+   (the sender has no encoder feedback).
+5. Base/tool calibration: measured robot base position and tool-centre point,
+   to compare with `IK.position` and the headset base alignment.
+
+### Supervised bring-up procedure (after the sheet is filled)
+
+1. Copy `hardware.unverified.json` to `hardware.verified.json`, fill every field,
+   set `verified: true` and `verification_reference` (date, TA name, method).
+2. Dry run: `server.py --output-profile python/config/hardware.verified.json`;
+   inspect `receiver_values` / `packet_hex` in `preview` log lines for several poses.
+3. Implement the physical transport as a **separate, reviewed change**: remove the
+   `PermissionError` in `RobotSender.set_enabled` for physical profiles behind an
+   explicit `--enable-physical` flag plus an interactive terminal confirmation, and
+   add a per-command joint-step limit relative to the last sent command (the
+   receiver's interpolation is unknown). Keep the recording-before-send rule.
+4. With the TA present and a hand on the stop: home pose, then one joint at a time
+   with steps of at most 0.05 rad, checking sign and zero against the sheet; then the
+   gripper; then small Cartesian moves; record commanded and observed angles.
+5. Only then: the pick-and-place rehearsal and 20-second timing.
+
+Do not treat MuJoCo-correct angles, a successful ping, or a successful
+`sendto()` as evidence that the physical mapping is correct.

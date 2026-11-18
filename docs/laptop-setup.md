@@ -1,5 +1,9 @@
 # Run this project on the Quest-connected laptop
 
+> Updated 2026-11-18: Python now defaults to **UDP 5006**, records every session to
+> `logs/robot_commands/`, and supports `--lan` + automatic Quest discovery.
+> For the headset build use [quest3.md](quest3.md); recording is in [recording.md](recording.md).
+
 ## Intended network layout
 
 ```text
@@ -52,9 +56,8 @@ artifacts and installed Editor modules are not transferred by Git.
 .\.venv\Scripts\python.exe python/server.py --port 5006 --output-profile python/config/mock.json
 ```
 
-4. Open `Assets/Scenes/DesktopDemo.unity`. Select **Simulation UDP** and set
-   **Server Address** to `127.0.0.1` and **Server Port** to `5006`, since Python
-   and the Editor are on the same laptop. Save the scene if appropriate.
+4. Open `Assets/Scenes/DesktopDemo.unity`. **Simulation UDP** is already set to
+   `127.0.0.1` port `5006` (Python and the Editor are on the same laptop).
 5. Press Play. Verify green feedback, target/rotation controls and amber goal
    preview. P requests a frozen packet preview; Enter confirms a **dry run**;
    G changes gripper intent. No binary command is transmitted in this mode.
@@ -76,9 +79,11 @@ When Unity runs on the headset, `127.0.0.1` points at the headset, so change
 **Server Port** `5006`. In PowerShell on the Python laptop, run:
 
 ```powershell
-# Replace the placeholder with the Python laptop's real LAN IP.
-.\.venv\Scripts\python.exe python/server.py --bind <PYTHON-LAPTOP-LAN-IP> --port 5006 --output-profile python/config/mock.json
+.\.venv\Scripts\python.exe python/server.py --lan
 ```
+
+`--lan` binds all interfaces, prints the laptop's LAN addresses and answers the
+Quest's discovery broadcast, so the headset normally needs no IP setting.
 
 Do not enter the angle brackets literally. Both devices must be on a reachable
 LAN; allow Python's incoming UDP 5006 on that local network when prompted.

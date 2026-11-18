@@ -6,6 +6,11 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/QuestMR.unity
+    guid: 022833d16ba6b324ab60b91aac344b71
+  - enabled: 0
     path: Assets/Scenes/DesktopDemo.unity
     guid: 35659bf7c67a9e849bd421a4a09b7c84
-  m_configObjects: {}
+  m_configObjects:
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 77fddf3938003964c827d1c59174476f, type: 2}
+    com.unity.xr.openxr.settings4: {fileID: 11400000, guid: 0614a194768d77d489534bb9a7b2cf46, type: 2}

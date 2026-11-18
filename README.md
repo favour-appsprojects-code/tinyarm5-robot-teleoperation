@@ -1,91 +1,75 @@
-# TinyARM-5 desktop teleoperation
+# TinyARM-5 Mixed Reality Robot Teleoperation
 
-Phase 1: Unity target → JSON/UDP → bounded position IK → MuJoCo actuators.
-Original `tiny_arm_5/` files are unchanged. Physical transmission is locked.
-There is now a separately gated binary sender for dry-run and loopback mock
-testing; see [hardware integration](docs/hardware.md).
+Quest 3 hands -> Unity (passthrough MR) -> JSON/UDP 5006 -> Python IK -> MuJoCo,
+with frozen previews, deliberate confirmation, permanent command recording, and
+a gated binary sender for the TA receiver (192.168.1.244:5005, **locked** until
+calibration is verified).
 
-## Phase 1 status
+| Component | State (2026-11-18) |
+|---|---|
+| Desktop Unity -> Python -> MuJoCo (Phase 1) | Working, manually verified Nov 12 |
+| Python IK, preview gate, recording, export, replay, receiver monitor | 34 automated tests pass |
+| Simulated cube/cup/gripper and 20-s task timer (MuJoCo) | Implemented and tested |
+| Quest hand tracking, HUD, passthrough, LAN discovery, build tooling | Code compiles against Unity 6.4 assemblies; **not yet run on the headset** |
+| Physical robot output | Locked: no receiver calibration available |
 
-Desktop Unity-to-MuJoCo motion has been manually verified: sideways, height,
-depth, reset, unreachable-target rejection, and recovery. The demonstration
-video has been recorded. Python's four automated test groups pass, including
-reset recovery after reaching the workspace boundary and loopback UDP.
+Details: [integration test report](docs/integration-test-report.md) ·
+[Quest build and use](docs/quest3.md) · [recording and replay](docs/recording.md) ·
+[hardware and calibration](docs/hardware.md) · [new laptop](docs/laptop-setup.md) ·
+[Phase 1 notes](docs/phase1.md) · [orientation](docs/orientation.md)
 
-The robot mesh is displayed in MuJoCo; Unity displays the target, axes and an
-amber joint-position goal preview. Quest deployment, simulated grasping and
-physical execution remain unfinished.
-
-## Final-project preparation
-
-The desktop target now has an amber joint-position preview and explicit packet
-preview/confirmation controls. **P** requests a frozen preview, **Enter** confirms
-it within five seconds, **G** toggles logical gripper state, and **Escape** disables
-output. Start with `--output-profile python/config/mock.json` for a no-transmission
-dry run. Target movement alone never sends a robot command. All physical motor
-calibration remains unknown; the example receiver IDs/angles are not assumed valid.
-
-[Hardware mapping, commands and tests](docs/hardware.md) ·
-[Quest status, prepared controller adapter and remaining setup](docs/quest3.md)
-
-Moving to another computer? Follow [Quest-connected laptop setup](docs/laptop-setup.md).
-The intended routing is Quest/Unity -> Python laptop **JSON UDP 5006** ->
-physical receiver **192.168.1.244:5005 binary UDP**. Physical execution remains
-locked until receiver mapping/calibration and explicit authorization are ready.
-
-## Run the demonstration
-
-Open PowerShell in this folder and start Python:
-
-```powershell
-.\.venv\Scripts\python.exe python/server.py
-```
-
-Expect `Ready UDP 127.0.0.1 5005` and a MuJoCo viewer. Leave it running.
-
-Open the `unity` folder as a project in Unity Hub using **6000.4.8f1**.
-Open `Assets/Scenes/DesktopDemo.unity`. If the scene is absent, select
-**TinyARM → Create Desktop Demo**. Press Play and click the Game view.
-
-- **W/S:** forward/back; **A/D:** left/right.
-- **Q/E:** down/up; **R:** reset to the tested initial target.
-- **I/K:** rotate about tool X (red); **J/L:** tool Y (green);
-  **U/O:** tool Z (blue), at 35 degrees/s. **T:** toggle orientation tracking.
-- **H:** move to a tested orientation-demo pose with more joint headroom,
-  and align target orientation to the accepted tool pose. Wait for settling,
-  then try I or U. **R** still returns to the original reset pose.
-- Coloured axes appear on the sphere automatically in Play mode. Matching
-  axes on the MuJoCo tip show its actual orientation. **R** resets both the
-  target position and the initial reachable tool orientation.
-- Position has priority. Orientation is best effort; the display reports
-  `matched` (within 5 degrees) or `limited / best effort`. A green sphere
-  means position is reachable, even if the requested rotation cannot match.
-- Green sphere: position IK converged within 1.5 mm. Red: rejected target;
-  last valid goal retained. Yellow: no recent Python feedback.
-- The scene displays target coordinates and IK residual. That residual is a
-  kinematic prediction; actuator tracking has its own small error.
-- Stop Play to stop transmitting; Python freezes its command ramp after 0.5 s.
-  Close the MuJoCo viewer or press Ctrl+C in Python to stop the server.
-
-Move slowly around the initial target for the recording. Keep Unity Game view
-and MuJoCo visible side by side. Show R/reset, small WASD/QE moves, green
-feedback, and corresponding arm motion. Finally demonstrate a red rejected
-target by moving well outside reach. Record only after confirming both windows
-respond. Upload the resulting video as unlisted on YouTube by November 12,
-11:59 PM; recording and upload are manual.
-
-## Recreate Python environment
-
-Python 3.13 was used. Only MuJoCo and NumPy are direct dependencies.
+## Quick start: desktop (no headset)
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r python/requirements.txt
+.\.venv\Scripts\python.exe python/server.py
+```
+
+Expect `Ready UDP 127.0.0.1 5006`, the session log path, and a MuJoCo viewer
+with the arm, a red cube and a blue cup. Open `unity/` in Unity **6000.4.8f1**,
+open `Assets/Scenes/DesktopDemo.unity`, press Play and click the Game view.
+
+| Key | Action |
+|---|---|
+| W/S, A/D, Q/E | move target forward/back, left/right, down/up |
+| I/K, J/L, U/O | rotate tool X/Y/Z; **T** toggles orientation tracking |
+| R / H | reset pose / orientation demo pose |
+| P / Enter / C | preview / confirm / cancel preview |
+| G | toggle gripper open/closed (logical) |
+| N | reset cube and task timer |
+| Esc | disable output for the rest of the session |
+
+Green target = IK converged, red = unreachable (last valid goal kept), yellow =
+no Python feedback. Amber skeleton = IK goal / frozen preview.
+
+## Quick start: Quest 3
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\quest_build.ps1        # builds unity\Builds\TinyARM5-Quest.apk
+powershell -ExecutionPolicy Bypass -File scripts\start_python_lan.ps1 -AddFirewallRule   # once, as admin
+powershell -ExecutionPolicy Bypass -File scripts\quest_deploy.ps1       # install + launch over USB
+```
+
+Pinch to move the target (relative clutch), pinch with the other hand for
+precision, use the HUD buttons for gripper, preview and **hold-to-confirm**.
+Full procedure and checklist: [docs/quest3.md](docs/quest3.md).
+
+## Tests
+
+```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s python -p "test*.py" -v
 ```
 
-Tests cover model loading, three IK targets, actuator tracking, unreachable
-targets, malformed messages, actual loopback UDP feedback, and duplicates.
-See [engineering notes](docs/phase1.md) for protocol, findings, and limitations.
-See [orientation tracking](docs/orientation.md) for the pose protocol, test
-results, and a step-by-step rotation check.
+Unity batch checks (Unity closed):
+`Unity.exe -batchmode -quit -projectPath unity -executeMethod VerifyQuestTeleop.Run -logFile verify.log`
+
+## Safety summary
+
+Target motion never sends a robot command. Execution requires a fresh,
+unchanged, 5-second, single-use preview plus a held confirmation. Approvals are
+written to disk before any transmission. Tracking loss, a changed target or a
+0.5 s stream gap cancel previews; reconnecting never replays old commands.
+Physical output cannot be enabled by any UI, network message or CLI flag in this
+version; see [docs/hardware.md](docs/hardware.md) for the calibration sheet and
+bring-up procedure.

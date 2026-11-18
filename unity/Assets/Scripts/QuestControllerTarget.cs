@@ -1,15 +1,15 @@
 using UnityEngine;
 using UnityEngine.XR;
 
-// Controller adapter for the existing UDP target. Needs a configured OpenXR
-// provider before it can receive device data. No hardware-enable control exists.
+// Controller FALLBACK for the UDP target (hands are primary, see
+// HandTeleopController). Inactive while hands are tracked. No hardware-enable control.
 public class QuestControllerTarget : MonoBehaviour
 {
     public DesktopTarget teleoperation;
     public Transform trackingOrigin;
     public Transform headCamera;
     public float movementScale = 0.5f;
-    bool gripWasDown, previewWasDown, confirmWasDown, trackingWasValid;
+    bool gripWasDown, previewWasDown, confirmWasDown, trackingWasValid, triggerWasDown;
     bool requireRelease = true;
     Vector3 controllerStart, targetStart;
     Quaternion controllerRotationStart, targetRotationStart;
@@ -23,8 +23,9 @@ public class QuestControllerTarget : MonoBehaviour
     {
         if (teleoperation == null || trackingOrigin == null) return;
         teleoperation.externalInput = true;
+        if (HandTeleopController.HandsActive) { requireRelease = true; gripWasDown = false; return; }
         var head = InputDevices.GetDeviceAtXRNode(XRNode.Head);
-        if (headCamera != null && head.TryGetFeatureValue(CommonUsages.devicePosition,out Vector3 hp) &&
+        if (headCamera != null && headCamera.GetComponent<UnityEngine.SpatialTracking.TrackedPoseDriver>() == null && head.TryGetFeatureValue(CommonUsages.devicePosition,out Vector3 hp) &&
             head.TryGetFeatureValue(CommonUsages.deviceRotation,out Quaternion hr)) {
             headCamera.localPosition = hp;
             headCamera.localRotation = hr;
@@ -33,7 +34,8 @@ public class QuestControllerTarget : MonoBehaviour
         bool valid = right.isValid && right.TryGetFeatureValue(CommonUsages.isTracked,out bool tracked) && tracked;
         if (!valid || !right.TryGetFeatureValue(CommonUsages.devicePosition,out Vector3 p) ||
             !right.TryGetFeatureValue(CommonUsages.deviceRotation,out Quaternion rotation)) {
-            if (trackingWasValid) teleoperation.DisableOutput();
+            // Tracking loss cancels a pending preview; it does not permanently disable output.
+            if (trackingWasValid) teleoperation.CancelPreview();
             trackingWasValid = false; requireRelease = true; gripWasDown = false;
             return;
         }
@@ -52,6 +54,7 @@ public class QuestControllerTarget : MonoBehaviour
             return;
         }
         if (grip && !gripWasDown && !requireRelease && teleoperation.PoseReady) {
+            teleoperation.CancelPreview();
             controllerStart = world; controllerRotationStart = worldRotation;
             targetStart = teleoperation.target.position; targetRotationStart = teleoperation.target.rotation;
         }
@@ -59,7 +62,10 @@ public class QuestControllerTarget : MonoBehaviour
             teleoperation.target.position = targetStart + movementScale*(world-controllerStart);
             teleoperation.target.rotation = worldRotation * Quaternion.Inverse(controllerRotationStart) * targetRotationStart;
         }
-        teleoperation.gripperState = trigger > 0.7f ? "closed" : "open";
+        // Gripper changes only on trigger edges, so the HUD buttons are not overridden.
+        if (trigger > 0.7f && !triggerWasDown) teleoperation.SetGripper("closed");
+        if (trigger < 0.3f && triggerWasDown) teleoperation.SetGripper("open");
+        triggerWasDown = trigger > 0.7f || (triggerWasDown && trigger >= 0.3f);
         if (preview && !previewWasDown && !grip) teleoperation.RequestPreview();
         if (confirm && !confirmWasDown && !grip) teleoperation.ConfirmPreview();
         var left = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);

@@ -6,7 +6,8 @@ import numpy as np
 MODEL = Path(__file__).resolve().parents[1] / 'tiny_arm_5' / 'tiny_arm_5.urdf'
 
 
-def load_robot():
+def load_robot(scene=False):
+    """scene=True adds visual-only cube/cup/gripper props (no joints, no contact)."""
     spec = mujoco.MjSpec.from_file(str(MODEL))
     spec.option.timestep = 0.0005
     spec.option.integrator = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
@@ -27,6 +28,9 @@ def load_robot():
             fromto=[*origin, *(origin + 0.045 * np.array(axis))],
             size=[0.0015, 0, 0], rgba=color, group=1,
             contype=0, conaffinity=0, mass=0)
+    if scene:
+        from sim_scene import add_pick_place
+        add_pick_place(spec)
     model = spec.compile()
     return model
 

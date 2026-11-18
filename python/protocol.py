@@ -36,11 +36,20 @@ def decode_pose(packet):
     return seq, p, orientation
 
 
+def is_discovery(packet):
+    """Quest-side server discovery request: {"v":1,"type":"discover"}."""
+    try:
+        obj = json.loads(packet)
+    except (ValueError, UnicodeError):
+        return False
+    return isinstance(obj, dict) and obj.get('v') == 1 and obj.get('type') == 'discover'
+
+
 def decode_controls(packet):
     """Optional dry-run actions; this protocol has no physical-enable action."""
     obj = json.loads(packet)
     action = obj.get('action', '')
-    if action not in ('', 'preview', 'confirm', 'disable'):
+    if action not in ('', 'preview', 'confirm', 'disable', 'cancel', 'reset_scene'):
         raise ValueError('Unsupported output action')
     gripper = obj.get('gripper') or None
     if gripper not in (None, 'open', 'closed'):

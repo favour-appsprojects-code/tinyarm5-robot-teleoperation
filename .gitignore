@@ -18,3 +18,11 @@ unity/Builds/
 .env
 .env.*
 !.env.example
+
+# Session command logs (inspect/export locally; not source)
+logs/
+
+# Android native build cache and local Meta debugger credentials
+unity/.utmp/
+unity/Assets/Resources/DevAgentSettings.asset
+unity/Assets/Resources/DevAgentSettings.asset.meta

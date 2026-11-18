@@ -220,15 +220,28 @@ class PreviewGate:
             self.invalidate()
 
     def preview(self, joints, gripper, signature, owner, now=None):
+        """Freeze a joint snapshot. Without a validated sender (simulation-only
+        mode) no packet is prepared, but the preview/confirm flow still runs so
+        approvals can be recorded and reviewed."""
         self.invalidate()
         now = time.monotonic() if now is None else now
-        command = self.sender.prepare(joints, gripper)
+        command = self.sender.prepare(joints, gripper) if self.sender is not None else None
         token = secrets.token_hex(16)
-        self.pending = dict(token=token, command=command, signature=signature,
+        self.pending = dict(token=token, command=command, signature=signature, gripper=gripper,
                             owner=owner, expires=now+self.ttl, model_joints=tuple(joints))
-        return dict(preview_id=token, preview_ttl_s=self.ttl, **command.describe())
+        return dict(preview_id=token, preview_ttl_s=self.ttl, **self.details(command))
 
-    def confirm(self, token, signature, owner, *, dry_run=True, now=None):
+    @staticmethod
+    def details(command):
+        if command is None:
+            return dict(destination=None, values=None, packet_bytes=0, packet_hex='',
+                        profile='simulation_only')
+        return command.describe()
+
+    def confirm(self, token, signature, owner, *, dry_run=True, now=None, before_send=None):
+        """Consume the preview once. before_send(pending, will_transmit) runs
+        after validation and before any transmission; returning False refuses
+        execution (used to guarantee the approval is recorded first)."""
         now = time.monotonic() if now is None else now
         self.observe(signature, owner, now)
         p = self.pending
@@ -236,8 +249,15 @@ class PreviewGate:
         self.invalidate()
         if not p or not secrets.compare_digest(str(token), p['token']):
             raise PermissionError('Missing, expired, changed or already-used preview')
+        command = p['command']
+        will_transmit = command is not None and not dry_run
+        if before_send is not None and before_send(p, will_transmit) is False:
+            raise PermissionError('Approval could not be recorded; execution refused')
+        if command is None:
+            LOG.info('CONFIRMED SIMULATION ONLY joints=%s', list(p['model_joints']))
+            return dict(status='confirmed_simulation_only', **self.details(None))
         if dry_run:
-            LOG.info('CONFIRMED DRY RUN %s', p['command'].describe())
-            return dict(status='confirmed_dry_run_no_transmission', **p['command'].describe())
-        self.sender.send(p['command'], confirmed=True)
-        return dict(status='sent_to_loopback_mock', **p['command'].describe())
+            LOG.info('CONFIRMED DRY RUN %s', command.describe())
+            return dict(status='confirmed_dry_run_no_transmission', **command.describe())
+        self.sender.send(command, confirmed=True)
+        return dict(status='sent_to_loopback_mock', **command.describe())

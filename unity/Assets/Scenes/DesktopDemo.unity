@@ -261,7 +261,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DesktopTarget
   serverAddress: 127.0.0.1
-  serverPort: 5005
+  serverPort: 5006
   target: {fileID: 1288736016}
 --- !u!4 &661074905
 Transform:

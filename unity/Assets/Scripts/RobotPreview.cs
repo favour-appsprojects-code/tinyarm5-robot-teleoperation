@@ -4,6 +4,8 @@ using UnityEngine;
 public class RobotPreview : MonoBehaviour
 {
     public Transform robotBase;
+    public Color color = new Color(1,0.65f,0.1f);
+    public float thickness = 0.006f;
     Transform[] rods;
     Material material;
 
@@ -13,10 +15,10 @@ public class RobotPreview : MonoBehaviour
         if (rods == null) {
             rods = new Transform[6];
             material = new Material(Shader.Find("Unlit/Color"));
-            material.color = new Color(1,0.65f,0.1f);
+            material.color = color;
             for (int i=0; i<6; i++) {
                 var part = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                part.name = "Goal preview link " + i;
+                part.name = name + " link " + i;
                 part.transform.SetParent(transform,false);
                 part.GetComponent<Renderer>().sharedMaterial = material;
                 if (Application.isPlaying) Destroy(part.GetComponent<Collider>());
@@ -28,7 +30,7 @@ public class RobotPreview : MonoBehaviour
             Vector3 a = Point(links,i), b = Point(links,i+1), delta = b-a;
             rods[i].position = (a+b)*0.5f;
             rods[i].rotation = delta.sqrMagnitude > 1e-10f ? Quaternion.FromToRotation(Vector3.up,delta) : Quaternion.identity;
-            rods[i].localScale = new Vector3(0.006f,delta.magnitude*0.5f,0.006f);
+            rods[i].localScale = new Vector3(thickness,delta.magnitude*0.5f,thickness);
         }
     }
     Vector3 Point(float[] p, int i) {

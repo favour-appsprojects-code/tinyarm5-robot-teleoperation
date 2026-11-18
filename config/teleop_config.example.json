@@ -1,0 +1,13 @@
+{
+  "serverAddress": "auto",
+  "serverPort": 5006,
+  "dominantHand": "right",
+  "normalScale": 1.0,
+  "fineScale": 0.25,
+  "pinchStartMeters": 0.018,
+  "pinchEndMeters": 0.032,
+  "filterMinCutoff": 1.0,
+  "filterBeta": 4.0,
+  "workspaceRadius": 0.34,
+  "workspaceMaxHeight": 0.34
+}
